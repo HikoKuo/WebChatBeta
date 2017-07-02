@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <title>MyLab1</title>
+    <script src="jquery.min.js"></script>
+    <link href="jquery.mobile-1.4.5.css" rel="stylesheet">
+    <script src="jquery.mobile-1.4.5.js"></script>
+    <script type="text/javascript" src="mqttws31.js"></script>
+    <script type="text/javascript">
+    var client;
+    var form = document.getElementById("tutorial");
+    var subscribeTopic;
+    var topic;
+    var currentPage;
+
+    function doConnect() {
+        subscribeTopic = $('#userId').val();
+        client = new Messaging.Client("localhost", 61614, subscribeTopic);
+        client.onConnect = onConnect;
+        client.onMessageArrived = onMessageArrived;
+        client.onConnectionLost = onConnectionLost;
+        client.connect({
+            onSuccess: onConnect,
+            cleanSession: false,
+        });
+    }
+
+    function doSubscribe() {
+        client.subscribe('/' + subscribeTopic + '/#', {
+            // qos: 2
+        }, function onSubscribe(err, granted) {
+            if (err) {
+                console.log('subscribe errors:', err); // no error shown
+            }
+
+            if (granted) {
+                console.log('subscribe granted:', granted); // it passes by here
+            }
+
+        });
+        location.href = "#chatlist";
+        $('#title').append(' (' + subscribeTopic + ')');
+    }
+
+    function doSend() {
+        var data = $('#msg').val();
+        $('#msg').val('');
+        var msg = new Messaging.Message(data);
+        msg.destinationName = "/" + topic + "/" + subscribeTopic;
+        msg.qos = 1;
+        // msg.retained = true;
+        client.send(msg);
+        $('#chatData').append("<p align='right'>" + 'Me : ' + data + '<p>');
+    }
+
+    function doDisconnect() {
+        client.disconnect();
+    }
+
+    // Web Messaging API callbacks
+
+    function onConnect() {
+        doSubscribe();
+
+
+        //----------------------------------------------
+        send();
+    }
+
+    function onConnectionLost(responseObject) {
+        var form = document.getElementById("example");
+        form.connected.checked = false;
+        if (responseObject.errorCode !== 0)
+            alert(client.clientId + "\n" + responseObject.errorCode);
+    }
+
+    function onMessageArrived(message) {
+        console.log('onMessageArrived');
+        var destinationName = message.destinationName;
+        var from = destinationName.split('/');
+        console.log(from[0] + '-' + from[1] + '-' + from[2]);
+        console.log(message.payloadString + "  from " + from[from.length - 1]);
+        console.log(topic);
+        if (from[from.length - 1] == topic) {
+            $('#chatData').append("<p align='left' style='background-color: yellow;'>" + from[from.length - 1] + ' : ' + message.payloadString + '<p>');
+        }
+    }
+
+    function setTarget(target) {
+
+        topic = target;
+        $('#chatTarget').html('<h3 align="middle">To : ' + target + '</h3>');
+    }
+
+
+    var webSocket =
+        new WebSocket('ws://localhost:8080/WebSocketReg/websocket');
+
+    webSocket.onerror = function(event) {
+        onError(event)
+    };
+
+    webSocket.onopen = function(event) {
+        onOpen(event)
+    };
+
+    webSocket.onmessage = function(event) {
+        onMessage(event)
+    };
+
+    function onMessage(event) {
+        // document.getElementById('messages').innerHTML 
+        //   += '<br />Received message: ' + event.data;
+        console.log('<br />Received message: ' + event.data);
+        var users = event.data.split(',');
+        $("#userList").html("");
+        $("#userList").append("<ul id='list' data-role='listview' data-inset='true'></ul>");
+        $("#userList").trigger("create");
+        for (var int = 0; int < users.length-1; int++) {
+          if (users[int] != subscribeTopic){
+
+            $("#list").append('<li id="listitem' + int + '"><a href="#chat" onclick="setTarget(\'' + users[int] + '\')">' + users[int] + '</a></li>');
+            
+          }
+        }
+        $("#list").listview("refresh");
+    }
+
+    function onOpen(event) {
+        // document.getElementById('messages').innerHTML 
+        //   = 'Connection established';
+        console.log('Connection established');
+    }
+
+    function onError(event) {
+        alert(event.data);
+    }
+
+    function send() {
+        var txt = subscribeTopic;
+        webSocket.send(txt);
+        return false;
+    }
+    </script>
+</head>
+
+<body id="content">
+    <div data-role="page" id="homePage">
+        <div data-role="header" id="header" data-position="fixed">
+            <h3>My Chat</h3>
+        </div>
+        <div data-role="content" id="content">
+            UserId :
+            <input type="textfield" id="userId" />
+            <a href="" data-role="button" data-theme="d" onclick="doConnect()">login</a>
+        </div>
+    </div>
+    <div data-role="page" id="chatlist">
+        <div data-role="header" id="header" data-position="fixed">
+            <h3 id="title">My Chat</h3>
+        </div>
+        <div data-role="content" id="content">
+          <div id="userList">
+          </div>
+            <!-- <ul id='chatList' data-role='listview' data-inset='true'>
+                <li>
+                    <a href="#chat" data-role="button" data-theme="d" onclick="setTarget('aaa')">aaa</a>
+                    <a href="#chat" data-role="button" data-theme="d" onclick="setTarget('aab')">aab</a>
+                    <a href="#chat" data-role="button" data-theme="d" onclick="setTarget('aac')">aac</a>
+                </li>
+            </ul> -->
+        </div>
+    </div>
+    <div data-role="page" id="chat">
+        <div data-role="header" id="header" data-position="fixed">
+            <a href="#chatlist" data-role="button" id="button0" data-icon="back">back</a>
+            <div id="chatTarget">
+                <h3>My Chat</h3>
+            </div>
+        </div>
+        <div data-role="content" style="padding: 15px">
+            <div id="chatData"></div>
+        </div>
+        <div data-role="footer" data-position="fixed" id="footer">
+            <input type="text" name="text" id="msg" data-theme="d" style=";">
+            <a href="#" data-role="button" id="button" onclick="doSend()" data-inline="true">Send</a>
+        </div>
+    </div>
+</body>
+
+</html>
